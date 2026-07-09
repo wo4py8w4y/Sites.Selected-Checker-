@@ -2,7 +2,7 @@
 Powershell to add and/or validate specific sites.selected permissions exist for user objects
 Using powershell MSGraph module it will ask you to enter the sharepoint URL to check and then enumerate the permisisons and/or add permissiolns
 you must authenticate using an applicaiton registration with the api permissions to MSGraph with sites.fullaccess with Application delgation.
-
+```Codeblock
 "displayName": "Sites.Selected provisioning",
 	"description": null,
 	"groupMembershipClaims": null,
