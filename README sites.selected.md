@@ -1,9 +1,9 @@
-Here are some different scripts all of which are about adding the permission to a sharepoint site via graph api; i haven't settled on which apprach is the best yet; some day i will narrow down the scripts here.
-
+these scripts will guide you through the process of creating the requirements for setting up the appregistration as well as actually setting the permission, and validating it.
 
 ## Sites.Selected provisioning (SharePoint Online)
 
 ### Synopsis
+
 Provision **Entra ID app registrations** for SharePoint Online **Sites.Selected**, create certificates for authentication, **grant & revoke** site-level permissions, and validate that the Sites.Selected permissions have applied correctly.
 
 This script is **menu-driven**, writes **full logs**, and outputs step-by-step informational status to the console.
@@ -13,6 +13,7 @@ This script is **menu-driven**, writes **full logs**, and outputs step-by-step i
 ---
 
 ### Description
+
 Creates/ensures **two** app registrations:
 
 - **My SharePoint** *(target app)*  
@@ -31,6 +32,7 @@ Provides menus to:
 ---
 
 ### Notes
+
 - Uses **first‑party** `Microsoft.Graph` PowerShell modules.
 - Avoids `Sites.Read.All`. Uses **Sites.Selected + explicit per‑site grants** (*least privilege*).
 - Logging writes to `./logs` with **timestamped** file names; the console shows **step numbers & statuses**.
@@ -38,6 +40,7 @@ Provides menus to:
 ---
 
 ### References
+
 - Delete permission on a site (Microsoft Graph): `DELETE /sites/{siteId}/permissions/{permissionId}` *(used by `Remove-MgSitePermission` — REVOKE)*  
   `https://learn.microsoft.com/graph/api/site-delete-permission?view=graph-rest-1.0`
 
@@ -50,6 +53,7 @@ Provides menus to:
 ---
 
 ### Changelog
+
 - **2026-03-11**: Initial version — apps, certs, grants, verification. Author: Aaron Francis  
 - **2026-03-11**: Added interactive menu for certificate creation/export, URL prompts, and end-of-run validation prompt. Author: Aaron Francis  
 - **2026-03-11**: Added step-by-step console output and timestamped file logging. Author: Aaron Francis  
