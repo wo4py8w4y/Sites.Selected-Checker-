@@ -27,7 +27,7 @@
     After grant, tests access as the target app by listing drives and uploading a file.
 
 .PARAMETER TenantId
-    Tenant ID or domain used to request an app-only token for test calls.
+    Tenant ID or verified domain used for the delegated Graph connection and app-only test calls.
 
 .PARAMETER AppClientSecret
     Client secret for the target app, required only when -TestAccess is used.
@@ -40,7 +40,7 @@
 
 .EXAMPLE
     .\Grant-SitesSelected-Graph.ps1
-    Runs with default values for the QGPGGS site.
+    Prompts for tenant, site, target app, and permission.
 
 .EXAMPLE
     .\Grant-SitesSelected-Graph.ps1 -Permission read -DryRun
@@ -54,18 +54,51 @@
 
 [CmdletBinding(SupportsShouldProcess)]
 param (
-    [string]$SiteUrl = "https://hpwqld.sharepoint.com/sites/SSQCCMS-TEST",
-    [string]$AppClientId = "ca4f341a-a9bf-45fd-82e7-0ff75ed66966",
-    [string]$AppDisplayName = "QGPGGS-SHAREPOINT",
-    [ValidateSet("read", "write")]
-    [string]$Permission = "read",
+    [string]$SiteUrl,
+    [string]$AppClientId,
+    [string]$AppDisplayName,
+    [string]$Permission,
     [switch]$DryRun,
     [switch]$TestAccess,
-    [string]$TenantId = "hpwqld.onmicrosoft.com",
+    [string]$TenantId,
     [SecureString]$AppClientSecret,
     [string]$UploadPath = "Reports/test.txt",
     [string]$UploadContent = "Hello from Sites.Selected!"
 )
+
+function Read-RequiredValue {
+    param([string]$Prompt)
+    do {
+        $value = (Read-Host $Prompt).Trim()
+        if ([string]::IsNullOrWhiteSpace($value)) { Write-Warning "A value is required." }
+    } while ([string]::IsNullOrWhiteSpace($value))
+    $value
+}
+
+if ([string]::IsNullOrWhiteSpace($TenantId)) { $TenantId = Read-RequiredValue "Enter tenant ID or verified domain" }
+if ([string]::IsNullOrWhiteSpace($SiteUrl)) {
+    do {
+        $SiteUrl = Read-RequiredValue "Enter SharePoint site URL (https://tenant.sharepoint.com/sites/name)"
+        $parsedSiteUri = $null
+        $validSiteUrl = [Uri]::TryCreate($SiteUrl, [UriKind]::Absolute, [ref]$parsedSiteUri) -and $parsedSiteUri.Scheme -eq 'https' -and $parsedSiteUri.Host.EndsWith('.sharepoint.com') -and $parsedSiteUri.AbsolutePath -ne '/'
+        if (-not $validSiteUrl) { Write-Warning "Enter a complete HTTPS SharePoint Online site URL." }
+    } while (-not $validSiteUrl)
+}
+if ([string]::IsNullOrWhiteSpace($AppClientId)) {
+    do {
+        $AppClientId = Read-RequiredValue "Enter target app client ID"
+        $parsedAppId = [guid]::Empty
+        $validAppId = [guid]::TryParse($AppClientId, [ref]$parsedAppId)
+        if (-not $validAppId) { Write-Warning "Enter a valid app client ID GUID." }
+    } while (-not $validAppId)
+}
+if ([string]::IsNullOrWhiteSpace($AppDisplayName)) { $AppDisplayName = Read-RequiredValue "Enter target app display name" }
+if ([string]::IsNullOrWhiteSpace($Permission)) {
+    $Permission = Read-Host "Permission [read/write] (default: read)"
+    if ([string]::IsNullOrWhiteSpace($Permission)) { $Permission = 'read' }
+}
+$Permission = $Permission.ToLowerInvariant()
+if ($Permission -notin @('read', 'write')) { throw "Permission must be 'read' or 'write'." }
 
 # Ensure Microsoft.Graph.Sites is available
 if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Sites))
@@ -77,7 +110,7 @@ if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Sites))
 Write-Host "Connecting to Microsoft Graph (Sites.FullControl.All)..." -ForegroundColor Cyan
 try
 {
-    Connect-MgGraph -Scopes "Sites.FullControl.All" -ErrorAction Stop
+    Connect-MgGraph -TenantId $TenantId -Scopes "Sites.FullControl.All" -ErrorAction Stop
 }
 catch
 {
@@ -165,8 +198,7 @@ if (-not $TestAccess)
 
 if (-not $AppClientSecret)
 {
-    Write-Error "-TestAccess requires -AppClientSecret. Provide it as a SecureString (for example via Read-Host -AsSecureString)."
-    exit 1
+    $AppClientSecret = Read-Host "Enter target app client secret for access test" -AsSecureString
 }
 
 Write-Host "" 

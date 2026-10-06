@@ -1,11 +1,24 @@
-# ==========================================
-# Configuration (Maps to appsettings.json)
-# ==========================================
-$TenantId = "enter your own tennantID"
-$ClientId = "enter your clientid"
-$ClientSecret = "Qfh8Q~VWjYkvw_EQSwM1rYKV62bH7fbCqUZWDbxq"
-$CheckAppId = "APP_ID_TO_CHECK_FOR_ACCESS"
-#
+function Read-RequiredInput {
+    param([string]$Prompt)
+    do {
+        $value = (Read-Host $Prompt).Trim()
+        if ([string]::IsNullOrWhiteSpace($value)) { Write-Warning "A value is required." }
+    } while ([string]::IsNullOrWhiteSpace($value))
+    $value
+}
+
+$TenantId = Read-RequiredInput "Enter tenant ID or verified domain"
+$ClientId = Read-RequiredInput "Enter provisioner app client ID"
+$CheckAppId = Read-RequiredInput "Enter target app client ID to inspect"
+do {
+    $SiteUrl = Read-RequiredInput "Enter SharePoint site URL (https://tenant.sharepoint.com/sites/name)"
+    $siteUri = $null
+    $validSiteUrl = [Uri]::TryCreate($SiteUrl, [UriKind]::Absolute, [ref]$siteUri) -and $siteUri.Scheme -eq 'https' -and $siteUri.Host.EndsWith('.sharepoint.com') -and $siteUri.AbsolutePath -ne '/'
+    if (-not $validSiteUrl) { Write-Warning "Enter a complete HTTPS SharePoint Online site URL." }
+} while (-not $validSiteUrl)
+$clientSecretSecure = Read-Host "Enter provisioner app client secret" -AsSecureString
+$secretBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($clientSecretSecure)
+$ClientSecret = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secretBstr)
 
 # ==========================================
 # 1. Authenticate & Get Access Token
@@ -26,6 +39,12 @@ try {
 } catch {
     Write-Error "Authentication failed. Please check your Tenant ID, Client ID, and Secret."
     exit
+} finally {
+    if ($secretBstr -and $secretBstr -ne [IntPtr]::Zero) {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($secretBstr)
+    }
+    $ClientSecret = $null
+    $TokenBody.client_secret = $null
 }
 
 # ==========================================
@@ -46,46 +65,6 @@ try {
     Write-Error "Failed to find the SharePoint site."
     exit
 }
-# ==========================================
-# 1. Authenticate & Get Access Token
-# ==========================================
-Write-Host "Authenticating to Entra ID..." -ForegroundColor Cyan
-$TokenUrl = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
-$TokenBody = @{
-    client_id     = $ClientId
-    client_secret = $ClientSecret
-    scope         = "https://graph.microsoft.com/.default"
-    grant_type    = "client_credentials"
-}
-
-try {
-    $TokenResponse = Invoke-RestMethod -Uri $TokenUrl -Method Post -Body $TokenBody -ErrorAction Stop
-    $Token = $TokenResponse.access_token
-    $Headers = @{ Authorization = "Bearer $Token" }
-} catch {
-    Write-Error "Authentication failed. Please check your Tenant ID, Client ID, and Secret."
-    exit
-}
-
-# ==========================================
-# 2. Resolve SharePoint Site URL to Site ID
-# ==========================================
-Write-Host "Resolving Site ID for: $SiteUrl" -ForegroundColor Cyan
-$Uri = [System.Uri]$SiteUrl
-$HostName = $Uri.Host
-$SitePath = $Uri.AbsolutePath
-
-$SiteGraphUrl = "https://graph.microsoft.com/v1.0/sites/$HostName`:$SitePath"
-
-try {
-    $Site = Invoke-RestMethod -Uri $SiteGraphUrl -Headers $Headers -ErrorAction Stop
-    $SiteId = $Site.id
-    Write-Host "Found Site ID: $SiteId" -ForegroundColor Green
-} catch {
-    Write-Error "Failed to find the SharePoint site."
-    exit
-}
-
 # ==========================================
 # 3. List All Explicit Permissions
 # ==========================================
@@ -93,16 +72,17 @@ Write-Host "Retrieving all explicit permissions for the site..." -ForegroundColo
 $PermissionsUrl = "https://graph.microsoft.com/v1.0/sites/$SiteId/permissions"
 
 try {
-    $Permissions = Invoke-RestMethod -Uri $PermissionsUrl -Headers $Headers -ErrorAction Stop
+    $PermissionResponse = Invoke-RestMethod -Uri $PermissionsUrl -Headers $Headers -ErrorAction Stop
+    $Permissions = @($PermissionResponse.value | Where-Object { $_.grantedToIdentitiesV2.application.id -contains $CheckAppId })
     
-    if ($Permissions.value.Count -eq 0) {
-        Write-Host "No explicit permissions found for this site." -ForegroundColor Yellow
+    if ($Permissions.Count -eq 0) {
+        Write-Host "No explicit permissions found for app $CheckAppId on this site." -ForegroundColor Yellow
     } else {
         Write-Host "`n=================================================" -ForegroundColor Green
         Write-Host " GRANTED PERMISSIONS FOR SITE" -ForegroundColor Green
         Write-Host "=================================================" -ForegroundColor Green
         
-        foreach ($perm in $Permissions.value) {
+        foreach ($perm in $Permissions) {
             $Roles = $perm.roles -join ", "
             $identities = $perm.grantedToIdentitiesV2
 

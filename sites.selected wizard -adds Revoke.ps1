@@ -37,11 +37,11 @@
 
 param(
     # Fixed to your tenant
-    [string]$TenantId = "ec445a2a-b5ba-46f6-bead-4595e9fbd4a2",
+    [string]$TenantId,
 
     # Default role if user presses Enter at role prompt
     [ValidateSet('Read', 'Write', 'Manage', 'FullControl')]
-    [string]$DefaultRole = 'FullControl',
+    [string]$DefaultRole = 'Read',
 
     # App names (per your request)
     [string]$TargetAppName = "mysite SharePoint",
@@ -52,6 +52,18 @@ param(
     [string]$CertOutFolder = (Join-Path -Path $PSScriptRoot -ChildPath "certs"),
     [string]$LogFolder = (Join-Path -Path $PSScriptRoot -ChildPath "logs")
 )
+
+if ([string]::IsNullOrWhiteSpace($TenantId)) {
+    do {
+        $TenantId = (Read-Host "Enter tenant ID or verified domain").Trim()
+        if ([string]::IsNullOrWhiteSpace($TenantId)) { Write-Warning "Tenant ID or domain is required." }
+    } while ([string]::IsNullOrWhiteSpace($TenantId))
+}
+
+$targetNameInput = Read-Host "Target app display name [$TargetAppName]"
+if (-not [string]::IsNullOrWhiteSpace($targetNameInput)) { $TargetAppName = $targetNameInput.Trim() }
+$provisionerNameInput = Read-Host "Provisioner app display name [$ProvisionerAppName]"
+if (-not [string]::IsNullOrWhiteSpace($provisionerNameInput)) { $ProvisionerAppName = $provisionerNameInput.Trim() }
 
 $script:TenantId = $TenantId
 $script:DefaultRole = $DefaultRole
@@ -345,16 +357,16 @@ function Revoke-SitePermissionFromApp {
 
 function Read-SiteGrantInput {
     param(
-        [string]$DefaultRole = 'FullControl',
-        [string]$DefaultUrl = 'https://my.sharepoint.com/sites/mysite'
+        [string]$DefaultRole = 'Read',
+        [string]$DefaultUrl = ''
     )
     $entries = @()
     Write-Information "" -InformationAction Continue
     Write-RunLog -Level INFO -Message "Prompting for SharePoint site URLs to grant to '$script:TargetAppName'"
-    Write-Information "Enter SharePoint site URLs (blank to finish). Press Enter with no URL to use default: $DefaultUrl" -InformationAction Continue
+    Write-Information "Enter SharePoint site URLs (blank to finish)." -InformationAction Continue
 
     while ($true) {
-        $url = Read-Host "Site URL (Enter for default, blank twice to finish)"
+        $url = Read-Host "Site URL (blank to finish)"
         if ([string]::IsNullOrWhiteSpace($url)) {
             if ($entries.Count -eq 0 -and $DefaultUrl) {
                 $url = $DefaultUrl

@@ -216,6 +216,7 @@ function Get-SpecificAppName
 Write-Host "### Step 1: Prepare Your Environment" -ForegroundColor Cyan
 Start-TroubleshootingLogging
 
+$TenantId = Read-RequiredInput -PromptText "Enter tenant ID or verified domain"
 $AppNameBase = Read-RequiredInput -PromptText "Enter app name base"
 $SharePointSiteUrl = Read-RequiredInput -PromptText "Enter SharePoint site URL (e.g. https://tenant.sharepoint.com/sites/siteName)"
 $WebId = Read-RequiredInput -PromptText "Enter Web ID"
@@ -259,7 +260,7 @@ $scopes = @(
     'Directory.Read.All'
 )
 
-Connect-MgGraph -Scopes $scopes
+Connect-MgGraph -TenantId $TenantId -Scopes $scopes
 Write-Log -Level INFO -Message 'Connected to Microsoft Graph.' -Data @{ Scopes = ($scopes -join ',') }
 
 Write-Host "### Step 4: Resolve Site Details" -ForegroundColor Cyan
